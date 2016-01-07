@@ -53,17 +53,6 @@
 
 #define N3DSVID_DRIVER_NAME "N3DS"
 
-#define CLEAR_COLOR 0x68B0D8FF
-
-#define DISPLAY_TRANSFER_FLAGS \
-	(GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) | \
-	GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) | \
-	GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
-
-typedef struct { float position[3]; float texcoord[2]; float normal[3]; } vertex;
-
-vertex *vertex_list;
-
 static DVLB_s* vshader_dvlb;
 static shaderProgram_s program;
 static int uLoc_projection;
@@ -106,17 +95,18 @@ static SDL_VideoDevice *N3DS_CreateDevice(int devindex)
 
 	/* Initialize all variables that we clean on shutdown */
 	device = (SDL_VideoDevice *)SDL_malloc(sizeof(SDL_VideoDevice));
-	if ( device ) {
+	if(device) {
 		SDL_memset(device, 0, (sizeof *device));
 		device->hidden = (struct SDL_PrivateVideoData *)
 				SDL_malloc((sizeof *device->hidden));
 	}
-	if ( (device == NULL) || (device->hidden == NULL) ) {
+    
+	if((device == NULL) || (device->hidden == NULL)) {
 		SDL_OutOfMemory();
 		if ( device ) {
 			SDL_free(device);
 		}
-		return(0);
+		return 0;
 	}
 	SDL_memset(device->hidden, 0, (sizeof *device->hidden));
 
@@ -312,11 +302,11 @@ SDL_Surface *N3DS_SetVideoMode(_THIS, SDL_Surface *current,
             
         vertex_y++;
     } while(temp_height -= nearest_pow(temp_height));    
-        
+
     // Configure buffers
-	C3D_BufInfo* bufInfo = C3D_GetBufInfo();    
-	BufInfo_Init(bufInfo);
-	BufInfo_Add(bufInfo, vbo_data, sizeof(vertex), 3, 0x210);
+    C3D_BufInfo* bufInfo = C3D_GetBufInfo();    
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, vbo_data, sizeof(vertex), 3, 0x210);
     
     C3D_TexSetFilter(&this->hidden->screen_segments[0].texture, GPU_LINEAR, GPU_NEAREST);
     C3D_TexBind(0, &this->hidden->screen_segments[0].texture);
@@ -410,7 +400,8 @@ static void N3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 	C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection); 
 
 	// Draw the VBO
-    for(int s = 0; s < this->hidden->screen_seg_count; s++) {
+    for(int s = 0; s < this->hidden->screen_seg_count; s++) 
+    {
         screen_segment *segment = &this->hidden->screen_segments[s];
             
         // Update texture
