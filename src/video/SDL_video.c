@@ -202,6 +202,7 @@ int SDL_VideoInit (const char *driver_name, Uint32 flags)
 		SDL_SetError("No available video device");
 		return(-1);
 	}
+    
 	current_video = video;
 	current_video->name = bootstrap[i]->name;
 
@@ -247,6 +248,7 @@ int SDL_VideoInit (const char *driver_name, Uint32 flags)
 		SDL_VideoQuit();
 		return(-1);
 	}
+
 
 	/* Create a zero sized video surface of the appropriate format */
 	video_flags = SDL_SWSURFACE;
