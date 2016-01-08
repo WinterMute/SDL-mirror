@@ -2907,7 +2907,7 @@ case "$host" in
         CheckVisibilityHidden
         if test x$with_platform = x3ds; then
             CFLAGS="$CFLAGS -ffunction-sections -fdata-sections -march=armv6k -mtune=mpcore -mfloat-abi=hard -mword-relocations"
-            EXTRA_CFLAGS="$EXTRA_CFLAGS -I$DEVKITPRO/libctru/include -I$DEVKITPRO/portlibs/armv6k -DARM11 -D_3DS"
+            EXTRA_CFLAGS="$EXTRA_CFLAGS -I$DEVKITPRO/libctru/include -I$DEVKITPRO/portlibs/armv6k -DARM11 -D_3DS -fno-short-enums"
 
             # Set up files for the video library
             if test x$enable_video = xyes; then
