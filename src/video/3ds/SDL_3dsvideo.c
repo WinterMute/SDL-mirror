@@ -21,25 +21,9 @@
 */
 #include "SDL_config.h"
 
-/* N3DS SDL video driver implementation; this is just enough to make an
- *  SDL-based application THINK it's got a working video driver, for
- *  applications that call SDL_Init(SDL_INIT_VIDEO) when they don't need it,
- *  and also for use as a collection of stubs when porting SDL to a new
- *  platform for which you haven't yet written a valid video driver.
- *
- * This is also a great way to determine bottlenecks: if you think that SDL
- *  is a performance problem for a given platform, enable this driver, and
- *  then see if your application runs faster without video overhead.
- *
- * Initial work by Ryan C. Gordon (icculus@icculus.org). A good portion
- *  of this was cut-and-pasted from Stephane Peter's work in the AAlib
- *  SDL video driver.  Renamed to "N3DS" by Sam Lantinga.
- */
-
 #include <3ds.h>
 #include <citro3d.h>
 #include <string.h>
-#include "vshader_shbin.h"
 
 #include "SDL_video.h"
 #include "SDL_mouse.h"
@@ -47,11 +31,11 @@
 #include "../SDL_pixels_c.h"
 #include "../../events/SDL_events_c.h"
 
-#include "SDL_n3dsvideo.h"
-#include "SDL_n3dsevents_c.h"
-#include "SDL_n3dsmouse_c.h"
+#include "SDL_3dsvideo.h"
+#include "SDL_3dsevents_c.h"
+#include "SDL_3dsmouse_c.h"
 
-#define N3DSVID_DRIVER_NAME "N3DS"
+#define X3DSVID_DRIVER_NAME "3DS"
 
 static DVLB_s* vshader_dvlb;
 static shaderProgram_s program;
@@ -60,36 +44,63 @@ static C3D_Mtx projection;
 
 static void* vbo_data;
 
+/* This should be moved to the build/configuration system */
+unsigned char vshader_shbin[] = {
+  0x44, 0x56, 0x4c, 0x42, 0x01, 0x00, 0x00, 0x00, 0x8c, 0x00, 0x00, 0x00,
+  0x44, 0x56, 0x4c, 0x50, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00,
+  0x08, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+  0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4e, 0x01, 0xf0, 0x07, 0x4e,
+  0x02, 0x08, 0x02, 0x08, 0x03, 0x18, 0x02, 0x08, 0x04, 0x28, 0x02, 0x08,
+  0x05, 0x38, 0x02, 0x08, 0x06, 0x10, 0x20, 0x4c, 0x00, 0x00, 0x00, 0x88,
+  0x6e, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa1, 0x0a, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x68, 0xc3, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x64, 0xc3, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x62, 0xc3, 0x06, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x61, 0xc3, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x6f, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x56, 0x4c, 0x45,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+  0x01, 0x00, 0x00, 0x00, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x54, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00,
+  0x01, 0x00, 0x00, 0x00, 0x6c, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00,
+  0x02, 0x00, 0x5f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x00,
+  0x00, 0x00, 0xbf, 0x00, 0x00, 0x00, 0xbe, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x0f, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x0f, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x13, 0x00, 0x70, 0x72, 0x6f, 0x6a,
+  0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x00, 0x00
+};
+unsigned int vshader_shbin_size = 260;
+
 /* Initialization/Query functions */
-static int N3DS_VideoInit(_THIS, SDL_PixelFormat *vformat);
-static SDL_Rect **N3DS_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags);
-static SDL_Surface *N3DS_SetVideoMode(_THIS, SDL_Surface *current, int width, int height, int bpp, Uint32 flags);
-static int N3DS_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors);
-static void N3DS_VideoQuit(_THIS);
+static int X3DS_VideoInit(_THIS, SDL_PixelFormat *vformat);
+static SDL_Rect **X3DS_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags);
+static SDL_Surface *X3DS_SetVideoMode(_THIS, SDL_Surface *current, int width, int height, int bpp, Uint32 flags);
+static int X3DS_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors);
+static void X3DS_VideoQuit(_THIS);
 
 /* Hardware surface functions */
-static int N3DS_AllocHWSurface(_THIS, SDL_Surface *surface);
-static int N3DS_LockHWSurface(_THIS, SDL_Surface *surface);
-static void N3DS_UnlockHWSurface(_THIS, SDL_Surface *surface);
-static void N3DS_FreeHWSurface(_THIS, SDL_Surface *surface);
+static int X3DS_AllocHWSurface(_THIS, SDL_Surface *surface);
+static int X3DS_LockHWSurface(_THIS, SDL_Surface *surface);
+static void X3DS_UnlockHWSurface(_THIS, SDL_Surface *surface);
+static void X3DS_FreeHWSurface(_THIS, SDL_Surface *surface);
 
 /* etc. */
-static void N3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects);
+static void X3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects);
 
-/* N3DS driver bootstrap functions */
+/* X3DS driver bootstrap functions */
 
-static int N3DS_Available(void)
+static int X3DS_Available(void)
 {
 	return 1;
 }
 
-static void N3DS_DeleteDevice(SDL_VideoDevice *device)
+static void X3DS_DeleteDevice(SDL_VideoDevice *device)
 {
 	SDL_free(device->hidden);
 	SDL_free(device);
 }
 
-static SDL_VideoDevice *N3DS_CreateDevice(int devindex)
+static SDL_VideoDevice *X3DS_CreateDevice(int devindex)
 {
 	SDL_VideoDevice *device;
 
@@ -111,43 +122,43 @@ static SDL_VideoDevice *N3DS_CreateDevice(int devindex)
 	SDL_memset(device->hidden, 0, (sizeof *device->hidden));
 
 	/* Set the function pointers */
-	device->VideoInit = N3DS_VideoInit;
-	device->ListModes = N3DS_ListModes;
-	device->SetVideoMode = N3DS_SetVideoMode;
+	device->VideoInit = X3DS_VideoInit;
+	device->ListModes = X3DS_ListModes;
+	device->SetVideoMode = X3DS_SetVideoMode;
 	device->CreateYUVOverlay = NULL;
-	device->SetColors = N3DS_SetColors;
-	device->UpdateRects = N3DS_UpdateRects;
-	device->VideoQuit = N3DS_VideoQuit;
-	device->AllocHWSurface = N3DS_AllocHWSurface;
+	device->SetColors = X3DS_SetColors;
+	device->UpdateRects = X3DS_UpdateRects;
+	device->VideoQuit = X3DS_VideoQuit;
+	device->AllocHWSurface = X3DS_AllocHWSurface;
 	device->CheckHWBlit = NULL;
 	device->FillHWRect = NULL;
 	device->SetHWColorKey = NULL;
 	device->SetHWAlpha = NULL;
-	device->LockHWSurface = N3DS_LockHWSurface;
-	device->UnlockHWSurface = N3DS_UnlockHWSurface;
+	device->LockHWSurface = X3DS_LockHWSurface;
+	device->UnlockHWSurface = X3DS_UnlockHWSurface;
 	device->FlipHWSurface = NULL;
-	device->FreeHWSurface = N3DS_FreeHWSurface;
+	device->FreeHWSurface = X3DS_FreeHWSurface;
 	device->SetCaption = NULL;
 	device->SetIcon = NULL;
 	device->IconifyWindow = NULL;
 	device->GrabInput = NULL;
 	device->GetWMInfo = NULL;
-	device->InitOSKeymap = N3DS_InitOSKeymap;
-	device->PumpEvents = N3DS_PumpEvents;
+	device->InitOSKeymap = X3DS_InitOSKeymap;
+	device->PumpEvents = X3DS_PumpEvents;
 
-	device->free = N3DS_DeleteDevice;
+	device->free = X3DS_DeleteDevice;
 
 	return device;
 }
 
-VideoBootStrap N3DS_bootstrap = {
-	N3DSVID_DRIVER_NAME, "SDL N3DS video driver",
-	N3DS_Available, N3DS_CreateDevice
+VideoBootStrap X3DS_bootstrap = {
+	X3DSVID_DRIVER_NAME, "SDL 3DS video driver",
+	X3DS_Available, X3DS_CreateDevice
 };
 
 static C3D_RenderBuf rb;
 
-int N3DS_VideoInit(_THIS, SDL_PixelFormat *vformat)
+int X3DS_VideoInit(_THIS, SDL_PixelFormat *vformat)
 {
 	/* Determine the screen depth (use default 8-bit depth) */
 	/* we change this during the SDL_SetVideoMode implementation... */
@@ -188,7 +199,7 @@ int N3DS_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	return 0;
 }
 
-SDL_Rect **N3DS_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
+SDL_Rect **X3DS_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
 {
    	 return (SDL_Rect **) -1;
 }
@@ -207,7 +218,7 @@ uint32_t nearest_pow(uint32_t num)
     return n == num ? n : n >> 1;
 }
 
-SDL_Surface *N3DS_SetVideoMode(_THIS, SDL_Surface *current,
+SDL_Surface *X3DS_SetVideoMode(_THIS, SDL_Surface *current,
 				int width, int height, int bpp, Uint32 flags)
 {
     // Determine texture format for screen texture
@@ -348,23 +359,23 @@ SDL_Surface *N3DS_SetVideoMode(_THIS, SDL_Surface *current,
 }
 
 /* We don't actually allow hardware surfaces other than the main one */
-static int N3DS_AllocHWSurface(_THIS, SDL_Surface *surface)
+static int X3DS_AllocHWSurface(_THIS, SDL_Surface *surface)
 {
 	return -1;
 }
 
-static void N3DS_FreeHWSurface(_THIS, SDL_Surface *surface)
+static void X3DS_FreeHWSurface(_THIS, SDL_Surface *surface)
 {
 	return;
 }
 
 /* We need to wait for vertical retrace on page flipped displays */
-static int N3DS_LockHWSurface(_THIS, SDL_Surface *surface)
+static int X3DS_LockHWSurface(_THIS, SDL_Surface *surface)
 {
 	return 0;
 }
 
-static void N3DS_UnlockHWSurface(_THIS, SDL_Surface *surface)
+static void X3DS_UnlockHWSurface(_THIS, SDL_Surface *surface)
 {
 	return;
 }
@@ -387,7 +398,7 @@ static inline u32 get_morton_offset(u32 x, u32 y, u32 bytes_per_pixel)
     return (i + offset) * bytes_per_pixel;
 }
 
-static void N3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
+static void X3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 {
     // VSync
     C3D_VideoSync();
@@ -430,7 +441,7 @@ static void N3DS_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
     C3D_RenderBufClear(&rb);
 }
 
-int N3DS_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors)
+int X3DS_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors)
 {
 	return 1;
 }
@@ -438,7 +449,7 @@ int N3DS_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors)
 /* Note:  If we are terminated, this could be called in the middle of
    another SDL video routine -- notably UpdateRects.
 */
-void N3DS_VideoQuit(_THIS)
+void X3DS_VideoQuit(_THIS)
 {
 	if (this->screen->pixels != NULL)
 	{
