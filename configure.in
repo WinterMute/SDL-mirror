@@ -61,6 +61,11 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_CHECK_TOOL(WINDRES, [windres], [:])
 
+dnl - platform, for use with game console ports
+AC_ARG_WITH([platform],
+  AC_HELP_STRING([--with-platform],[build for specific platform]),
+  [], [with_platform=default])
+
 dnl Set up the compiler and linker flags
 INCLUDE="-I$srcdir/include"
 if test x$srcdir != x.; then
@@ -2897,6 +2902,38 @@ case "$host" in
         fi
         # The RISC OS platform requires special setup.
         EXTRA_LDFLAGS="$EXTRA_LDFLAGS -ljpeg -ltiff -lpng -lz"
+        ;;
+    arm-none-eabi)
+        CheckVisibilityHidden
+        if test x$with_platform = x3ds; then
+            CFLAGS="$CFLAGS -ffunction-sections -fdata-sections -march=armv6k -mtune=mpcore -mfloat-abi=hard -mword-relocations"
+            EXTRA_CFLAGS="$EXTRA_CFLAGS -I$DEVKITPRO/libctru/include -I$DEVKITPRO/portlibs/armv6k -DARM11 -D_3DS"
+
+            # Set up files for the video library
+            if test x$enable_video = xyes; then
+                AC_DEFINE(SDL_VIDEO_DRIVER_3DS)
+                SOURCES="$SOURCES $srcdir/src/video/3ds/*.c"
+                have_video=yes
+            fi
+            # Set up files for the audio library
+            if test x$enable_audio = xyes; then
+                AC_DEFINE(SDL_AUDIO_DRIVER_3DS)
+                SOURCES="$SOURCES $srcdir/src/audio/3ds/*.c"
+                have_audio=yes
+            fi
+            # Set up files for the joystick library
+            if test x$enable_joystick = xyes; then
+                AC_DEFINE(SDL_JOYSTICK_3DS)
+                SOURCES="$SOURCES $srcdir/src/joystick/3ds/*.c"
+                have_joystick=yes
+            fi
+            # Set up files for the timer library
+            if test x$enable_timers = xyes; then
+                AC_DEFINE(SDL_TIMER_3DS)
+                SOURCES="$SOURCES $srcdir/src/timer/3ds/*.c"
+                have_timers=yes
+            fi
+        fi
         ;;
     *)
         AC_MSG_ERROR([
